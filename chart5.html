@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Chart 5 — Abortion Rate by Clinic Availability (Median Split)</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  body{font-family:sans-serif;margin:20px;color:#111}
+  h1{font-size:20px;margin:0 0 10px}
+  svg{width:100%;height:auto}
+  .axis path,.axis line{stroke:#9ca3af}
+  .tooltip{position:fixed;pointer-events:none;background:#111;color:#fff;padding:6px 8px;border-radius:6px;font-size:12px;opacity:0}
+</style>
+</head>
+<body>
+<h1>Chart 5 — Abortion Rate by Clinic Availability (Median Split)</h1>
+<svg id="c5" viewBox="0 0 700 480"></svg>
+<div id="tt" class="tooltip"></div>
+<script>
+const FILE="data/GuttmacherInstituteAbortionDataByState.xlsx", SHEET="Guttmacher";
+const COLS={ state:"U.S. State", clinics:"No. of abortion clinics, 2020", rate:"No. of abortions per 1,000 women aged 15–44, by state of residence, 2020" };
+const tt=d3.select("#tt"); const show=(h,[x,y])=>tt.style("opacity",1).html(h).style("left",x+"px").style("top",y+"px"); const hide=()=>tt.style("opacity",0);
+const ton=v=>{ if(v==null) return; v=String(v).replace(/[—–%,]/g,"").trim(); if(!v||v.toLowerCase()==="unavailable") return; v=+v; return Number.isFinite(v)?v:undefined; };
+
+fetch(FILE).then(r=>r.arrayBuffer()).then(b=>{
+  const wb=XLSX.read(b,{type:"array"}), ws=wb.Sheets[SHEET], rows=XLSX.utils.sheet_to_json(ws,{defval:null});
+  const rows=rowsClean(rows);
+  draw(rows);
+});
+
+function rowsClean(rows){
+  return rows.map(r=>({state:r[COLS.state], clinics:ton(r[COLS.clinics]), rate:ton(r[COLS.rate])}))
+             .filter(d=>d.state && Number.isFinite(d.clinics) && Number.isFinite(d.rate));
+}
+
+function fiveNum(arr){
+  const s=arr.slice().sort(d3.ascending);
+  return {min:d3.min(s), q1:d3.quantileSorted(s,.25), med:d3.quantileSorted(s,.5), q3:d3.quantileSorted(s,.75), max:d3.max(s)};
+}
+
+function draw(rows){
+  const svg=d3.select("#c5"), m={t:20,r:20,b:40,l:56}, w=700-m.l-m.r, h=480-m.t-m.b, g=svg.append("g").attr("transform",`translate(${m.l},${m.t})`);
+  const med=d3.median(rows,d=>d.clinics);
+  const group=rows.map(d=>({grp:d.clinics>=med?"High clinics":"Low clinics", val:d.rate, state:d.state}));
+  const groups=["Low clinics","High clinics"];
+  const stats=groups.map(name=>{const vals=group.filter(d=>d.grp===name).map(d=>d.val); return {name, vals, ...fiveNum(vals)};});
+
+  const x=d3.scaleBand().domain(groups).range([0,w]).padding(.4);
+  const y=d3.scaleLinear().domain([0,d3.max(group,d=>d.val)]).nice().range([h,0]);
+
+  g.append("g").attr("class","axis").attr("transform",`translate(0,${h})`).call(d3.axisBottom(x));
+  g.append("g").attr("class","axis").call(d3.axisLeft(y));
+
+  const boxW=x.bandwidth();
+  const boxes=g.selectAll(".box").data(stats).join("g").attr("transform",d=>`translate(${x(d.name)},0)`);
+
+  boxes.append("rect").attr("x",boxW*.15).attr("width",boxW*.7).attr("y",d=>y(d.q3)).attr("height",d=>y(d.q1)-y(d.q3)).attr("fill","#fde68a").attr("stroke","#111");
+  boxes.append("line").attr("x1",boxW*.15).attr("x2",boxW*.85).attr("y1",d=>y(d.med)).attr("y2",d=>y(d.med)).attr("stroke","#111").attr("stroke-width",1.5);
+  boxes.append("line").attr("x1",boxW*.5).attr("x2",boxW*.5).attr("y1",d=>y(d.min)).attr("y2",d=>y(d.q1)).attr("stroke","#111");
+  boxes.append("line").attr("x1",boxW*.35).attr("x2",boxW*.65).attr("y1",d=>y(d.min)).attr("y2",d=>y(d.min)).attr("stroke","#111");
+  boxes.append("line").attr("x1",boxW*.5).attr("x2",boxW*.5).attr("y1",d=>y(d.q3)).attr("y2",d=>y(d.max)).attr("stroke","#111");
+  boxes.append("line").attr("x1",boxW*.35).attr("x2",boxW*.65).attr("y1",d=>y(d.max)).attr("y2",d=>y(d.max)).attr("stroke","#111");
+
+  g.selectAll(".pt").data(group).join("circle").attr("class","pt").attr("r",2.8)
+   .attr("cx",d=>x(d.grp)+boxW/2+(Math.random()-0.5)*boxW*0.5).attr("cy",d=>y(d.val)).attr("fill","#f59e0b")
+   .on("mousemove",(e,d)=>show(`<strong>${d.state}</strong><br/>Rate: ${d3.format(".1f")(d.val)}`,d3.pointer(e)))
+   .on("mouseleave",hide);
+}
+</script>
+</body>
+</html>

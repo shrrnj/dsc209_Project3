@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Chart 1: Top 10 States by Clinics</title>
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  body{font-family:sans-serif;margin:0;padding:20px;}
+  h1{font-size:20px;}
+  svg{width:100%;height:auto;}
+  .axis path,.axis line{stroke:#999;}
+  .tooltip{position:fixed;pointer-events:none;background:#111;color:#fff;
+           padding:6px 8px;border-radius:6px;font-size:12px;opacity:0;}
+</style>
+</head>
+<body>
+<h1>Chart 1: Top 10 States by Clinics (2020)</h1>
+<svg id="c1" viewBox="0 0 700 420"></svg>
+<div id="tt" class="tooltip"></div>
+
+<script>
+const XLSX_PATH = "data/GuttmacherInstituteAbortionDataByState.xlsx";
+const SHEET_NAME = "Guttmacher";
+const COLS = {
+  state: "U.S. State",
+  clinics_2020: "No. of abortion clinics, 2020"
+};
+
+function toNumber(v){
+  if(!v) return undefined;
+  v = String(v).replace(/,/g,"").replace(/[—–]/g,"").trim();
+  if(v===""||v.toLowerCase()==="unavailable") return undefined;
+  const n = +v; return Number.isFinite(n)?n:undefined;
+}
+
+const tt = d3.select("#tt");
+const showTT=(html,[x,y])=>tt.style("opacity",1).html(html).style("left",x+"px").style("top",y+"px");
+const hideTT=()=>tt.style("opacity",0);
+
+fetch(XLSX_PATH).then(r=>r.arrayBuffer()).then(buf=>{
+  const wb = XLSX.read(buf,{type:"array"});
+  const ws = wb.Sheets[SHEET_NAME];
+  const rows = XLSX.utils.sheet_to_json(ws,{defval:null});
+  const data = rows.map(r=>({
+    state:r[COLS.state],
+    clinics_2020: toNumber(r[COLS.clinics_2020])
+  })).filter(d=>d.state);
+
+  drawChart(data);
+});
+
+function drawChart(data){
+  const svg = d3.select("#c1");
+  const m={t:20,r:20,b:30,l:170}, w=700-m.l-m.r, h=420-m.t-m.b;
+  const g=svg.append("g").attr("transform",`translate(${m.l},${m.t})`);
+
+  const rows = data.filter(d=>Number.isFinite(d.clinics_2020))
+    .sort((a,b)=>d3.descending(a.clinics_2020,b.clinics_2020))
+    .slice(0,10).reverse();
+
+  const y=d3.scaleBand().domain(rows.map(d=>d.state)).range([h,0]).padding(0.12);
+  const x=d3.scaleLinear().domain([0,d3.max(rows,d=>d.clinics_2020)]).nice().range([0,w]);
+
+  g.selectAll("rect").data(rows).join("rect")
+    .attr("y",d=>y(d.state)).attr("x",0)
+    .attr("width",d=>x(d.clinics_2020)).attr("height",y.bandwidth())
+    .attr("fill","#60a5fa")
+    .on("mousemove",(ev,d)=>showTT(`${d.state}<br/>Clinics: ${d3.format(",")(d.clinics_2020)}`,d3.pointer(ev)))
+    .on("mouseleave",hideTT);
+
+  g.append("g").attr("class","axis").call(d3.axisLeft(y));
+  g.append("g").attr("class","axis").attr("transform",`translate(0,${h})`).call(d3.axisBottom(x).ticks(6).tickFormat(d3.format(",")));
+}
+</script>
+</body>
+</html>

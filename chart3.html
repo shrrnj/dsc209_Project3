@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Chart 3 — Clinics vs Abortions by Occurrence (2020)</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  body{font-family:sans-serif;margin:20px;color:#111}
+  h1{font-size:20px;margin:0 0 10px}
+  svg{width:100%;height:auto}
+  .axis path,.axis line{stroke:#9ca3af}
+  .tooltip{position:fixed;pointer-events:none;background:#111;color:#fff;padding:6px 8px;border-radius:6px;font-size:12px;opacity:0}
+</style>
+</head>
+<body>
+<h1>Chart 3 — Clinics vs Abortions by Occurrence (2020)</h1>
+<svg id="c3" viewBox="0 0 700 480"></svg>
+<div id="tt" class="tooltip"></div>
+<script>
+const FILE="data/GuttmacherInstituteAbortionDataByState.xlsx", SHEET="Guttmacher";
+const COLS={ state:"U.S. State", clinics:"No. of abortion clinics, 2020", occ:"No. of abortions, by state of occurrence, 2020" };
+const tt=d3.select("#tt"); const show=(h,[x,y])=>tt.style("opacity",1).html(h).style("left",x+"px").style("top",y+"px"); const hide=()=>tt.style("opacity",0);
+const ton=v=>{ if(v==null) return; v=String(v).replace(/,/g,"").replace(/[—–%]/g,"").trim(); if(!v||v.toLowerCase()==="unavailable") return; v=+v; return Number.isFinite(v)?v:undefined; };
+const fit=pts=>{const n=pts.length,sx=d3.sum(pts,d=>d.x),sy=d3.sum(pts,d=>d.y),sxx=d3.sum(pts,d=>d.x*d.x),sxy=d3.sum(pts,d=>d.x*d.y),d=n*sxx-sx*sx; if(!d) return{m:0,b:d3.mean(pts,d=>d.y)}; const m=(n*sxy-sx*sy)/d,b=(sy-m*sx)/n; return{m,b};};
+
+fetch(FILE).then(r=>r.arrayBuffer()).then(b=>{
+  const wb=XLSX.read(b,{type:"array"}), ws=wb.Sheets[SHEET], rows=XLSX.utils.sheet_to_json(ws,{defval:null});
+  const data=rows.map(r=>({state:r[COLS.state], clinics:ton(r[COLS.clinics]), occ:ton(r[COLS.occ])})).filter(d=>d.state && Number.isFinite(d.clinics) && Number.isFinite(d.occ));
+  draw(data);
+});
+
+function draw(data){
+  const svg=d3.select("#c3"), m={t:20,r:20,b:44,l:56}, w=700-m.l-m.r, h=480-m.t-m.b, g=svg.append("g").attr("transform",`translate(${m.l},${m.t})`);
+  const x=d3.scaleLinear().domain(d3.extent(data,d=>d.clinics)).nice().range([0,w]);
+  const y=d3.scaleLinear().domain(d3.extent(data,d=>d.occ)).nice().range([h,0]);
+
+  g.append("g").attr("class","axis").attr("transform",`translate(0,${h})`).call(d3.axisBottom(x).ticks(6).tickFormat(d3.format(",")));
+  g.append("g").attr("class","axis").call(d3.axisLeft(y).ticks(6));
+
+  g.selectAll("circle").data(data).join("circle").attr("r",4.5).attr("cx",d=>x(d.clinics)).attr("cy",d=>y(d.occ)).attr("fill","#60a5fa")
+   .on("mousemove",(e,d)=>show(`<strong>${d.state}</strong><br/>Clinics: ${d3.format(",")(d.clinics)}<br/>Abortions (occ): ${d3.format(",")(d.occ)}`,d3.pointer(e)))
+   .on("mouseleave",hide);
+
+  const pts=data.map(d=>({x:d.clinics,y:d.occ})), {m,b}=fit(pts), [x0,x1]=x.domain();
+  g.append("line").attr("x1",x(x0)).attr("y1",y(m*x0+b)).attr("x2",x(x1)).attr("y2",y(m*x1+b)).attr("stroke","#111").attr("stroke-width",1.2).attr("stroke-dasharray","4,3");
+}
+</script>
+</body>
+</html>

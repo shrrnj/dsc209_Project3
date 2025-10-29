@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Chart 2 — Distribution of Abortion Rate (per 1,000, residence, 2020)</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  body{font-family:sans-serif;margin:20px;color:#111}
+  h1{font-size:20px;margin:0 0 10px}
+  svg{width:100%;height:auto}
+  .axis path,.axis line{stroke:#9ca3af}
+  .tooltip{position:fixed;pointer-events:none;background:#111;color:#fff;padding:6px 8px;border-radius:6px;font-size:12px;opacity:0}
+</style>
+</head>
+<body>
+<h1>Chart 2 — Distribution of Abortion Rate (per 1,000, residence, 2020)</h1>
+<svg id="c2" viewBox="0 0 700 420"></svg>
+<div id="tt" class="tooltip"></div>
+<script>
+const FILE="data/GuttmacherInstituteAbortionDataByState.xlsx", SHEET="Guttmacher";
+const COLS={ rate:"No. of abortions per 1,000 women aged 15–44, by state of residence, 2020" };
+const tt=d3.select("#tt"); const show=(h,[x,y])=>tt.style("opacity",1).html(h).style("left",x+"px").style("top",y+"px"); const hide=()=>tt.style("opacity",0);
+const ton=v=>{ if(v==null) return; v=String(v).replace(/[—–%]/g,"").trim(); if(!v||v.toLowerCase()==="unavailable") return; v=+v; return Number.isFinite(v)?v:undefined; };
+
+fetch(FILE).then(r=>r.arrayBuffer()).then(b=>{
+  const wb=XLSX.read(b,{type:"array"}), ws=wb.Sheets[SHEET], rows=XLSX.utils.sheet_to_json(ws,{defval:null});
+  const vals=rows.map(r=>ton(r[COLS.rate])).filter(Number.isFinite);
+  draw(vals);
+});
+
+function draw(vals){
+  const svg=d3.select("#c2"), m={t:20,r:20,b:40,l:50}, w=700-m.l-m.r, h=420-m.t-m.b, g=svg.append("g").attr("transform",`translate(${m.l},${m.t})`);
+  const x=d3.scaleLinear().domain(d3.extent(vals)).nice().range([0,w]);
+  const bins=d3.bin().domain(x.domain()).thresholds(15)(vals);
+  const y=d3.scaleLinear().domain([0,d3.max(bins,d=>d.length)]).nice().range([h,0]);
+
+  g.selectAll("rect").data(bins).join("rect")
+   .attr("x",d=>x(d.x0)+1).attr("y",d=>y(d.length))
+   .attr("width",d=>Math.max(0,x(d.x1)-x(d.x0)-1)).attr("height",d=>h-y(d.length))
+   .attr("fill","#86efac")
+   .on("mousemove",(e,d)=>show(`Rate: ${d3.format(".1f")(d.x0)}–${d3.format(".1f")(d.x1)}<br/>States: ${d.length}`,d3.pointer(e)))
+   .on("mouseleave",hide);
+
+  g.append("g").attr("class","axis").attr("transform",`translate(0,${h})`).call(d3.axisBottom(x).ticks(6));
+  g.append("g").attr("class","axis").call(d3.axisLeft(y).ticks(6));
+  g.append("text").attr("x",w/2).attr("y",h+34).attr("text-anchor","middle").text("Abortion rate per 1,000 women (residence, 2020)");
+}
+</script>
+</body>
+</html>

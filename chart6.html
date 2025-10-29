@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Chart 6 — Top 10 States by % Traveling Out-of-State (2020)</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  body{font-family:sans-serif;margin:20px;color:#111}
+  h1{font-size:20px;margin:0 0 10px}
+  svg{width:100%;height:auto}
+  .axis path,.axis line{stroke:#9ca3af}
+  .tooltip{position:fixed;pointer-events:none;background:#111;color:#fff;padding:6px 8px;border-radius:6px;font-size:12px;opacity:0}
+</style>
+</head>
+<body>
+<h1>Chart 6 — Top 10 States by % Traveling Out-of-State (2020)</h1>
+<svg id="c6" viewBox="0 0 700 420"></svg>
+<div id="tt" class="tooltip"></div>
+<script>
+const FILE="data/GuttmacherInstituteAbortionDataByState.xlsx", SHEET="Guttmacher";
+const COLS={ state:"U.S. State", travel:"% of residents obtaining abortions who traveled out of state for care, 2020" };
+const tt=d3.select("#tt"); const show=(h,[x,y])=>tt.style("opacity",1).html(h).style("left",x+"px").style("top",y+"px"); const hide=()=>tt.style("opacity",0);
+const ton=v=>{ if(v==null) return; v=String(v).replace(/[—–%]/g,"").trim(); if(!v||v.toLowerCase()==="unavailable") return; v=+v; return Number.isFinite(v)?v:undefined; };
+
+fetch(FILE).then(r=>r.arrayBuffer()).then(b=>{
+  const wb=XLSX.read(b,{type:"array"}), ws=wb.Sheets[SHEET], rows=XLSX.utils.sheet_to_json(ws,{defval:null});
+  const data=rows.map(r=>({state:r[COLS.state], travel:ton(r[COLS.travel])})).filter(d=>d.state && Number.isFinite(d.travel));
+  draw(data);
+});
+
+function draw(data){
+  const svg=d3.select("#c6"), m={t:20,r:20,b:30,l:170}, w=700-m.l-m.r, h=420-m.t-m.b, g=svg.append("g").attr("transform",`translate(${m.l},${m.t})`);
+  const rows=data.sort((a,b)=>d3.descending(a.travel,b.travel)).slice(0,10).reverse();
+  const y=d3.scaleBand().domain(rows.map(d=>d.state)).range([h,0]).padding(.12);
+  const x=d3.scaleLinear().domain([0,d3.max(rows,d=>d.travel)]).nice().range([0,w]);
+
+  g.selectAll("rect").data(rows).join("rect").attr("y",d=>y(d.state)).attr("x",0)
+   .attr("width",d=>x(d.travel)).attr("height",y.bandwidth()).attr("fill","#fca5a5")
+   .on("mousemove",(e,d)=>show(`<strong>${d.state}</strong><br/>% traveling: ${d3.format(".1f")(d.travel)}%`,d3.pointer(e)))
+   .on("mouseleave",hide);
+
+  g.append("g").attr("class","axis").call(d3.axisLeft(y));
+  g.append("g").attr("class","axis").attr("transform",`translate(0,${h})`).call(d3.axisBottom(x).ticks(6));
+}
+</script>
+</body>
+</html>
